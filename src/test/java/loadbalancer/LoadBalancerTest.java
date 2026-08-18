@@ -18,23 +18,24 @@ public class LoadBalancerTest {
 
     LoadBalancer loadBalancer;
 
+    @BeforeEach
+    void setup() {
+        loadBalancer = new LoadBalancer(new RandomStrategy());
+    }
 
     @Test
     void shouldRegisterInstance() {
-       loadBalancer = new LoadBalancer(new RandomStrategy());
        loadBalancer.registerInstance("123");
         assertTrue(loadBalancer.contains("123"));
     }
     @Test
     void shouldNotAllowDuplicateAddress(){
-        loadBalancer = new LoadBalancer(new RandomStrategy());
         loadBalancer.registerInstance("123");
         assertThrows(DuplicateInstanceException.class,
                 () -> loadBalancer.registerInstance("123"));
     }
     @Test
     void shouldNotAddMoreThanCapacity() {
-        loadBalancer = new LoadBalancer(new RandomStrategy());
         for(int i=1;i<=10;i++){
             loadBalancer.registerInstance(String.valueOf(124 + i));
         }
@@ -42,43 +43,29 @@ public class LoadBalancerTest {
     }
     @Test
     void shouldNotRegisterInstanceWithNullAddress() {
-        loadBalancer = new LoadBalancer(new RandomStrategy());
         assertThrows(InvalidAddressException.class,
                 () -> loadBalancer.registerInstance(null));
     }
     @Test
     void shouldFailWhenTryingToFetchInstanceWhenNoneRegistered() {
-        loadBalancer = new LoadBalancer(new RandomStrategy());
+
         assertThrows(NoInstancesAvailableException.class, () -> loadBalancer.getInstance());
     }
     @Test
-    void shouldFetchRandomInstance() {
-        loadBalancer = new LoadBalancer(new RandomStrategy());
+    void shouldOnlyReturnRegisteredInstancesAndVaryOverManyCalls() {
         loadBalancer.registerInstance("123");
         loadBalancer.registerInstance("124");
         loadBalancer.registerInstance("125");
         loadBalancer.registerInstance("126");
         loadBalancer.registerInstance("127");
-
-        assertTrue(loadBalancer.contains(loadBalancer.getInstance()));
-    }
-    @Test
-    void shouldBeAbleToReturnDifferentInstancesOverManyCalls() {
-        loadBalancer = new LoadBalancer(new RandomStrategy());
-        loadBalancer.registerInstance("123");
-        loadBalancer.registerInstance("124");
-        loadBalancer.registerInstance("125");
-        loadBalancer.registerInstance("126");
-        loadBalancer.registerInstance("127");
-
         Set<String> resultsSeen = new HashSet<>();
         for (int i = 0; i < 100; i++) {
-            resultsSeen.add(loadBalancer.getInstance());
+            String result = loadBalancer.getInstance();
+            assertTrue(loadBalancer.contains(result));
+            resultsSeen.add(result);
         }
-
         assertTrue(resultsSeen.size() > 1);
     }
-
     @Test
     void shouldReturnInstancesInRoundRobinOrder() {
         LoadBalancer loadBalancer = new LoadBalancer(new RoundRobinStrategy());
@@ -103,7 +90,6 @@ public class LoadBalancerTest {
 
     @Test
     void shouldAllowOnlyOneRegistrationWhenManyThreadsRegisterSameAddressConcurrently() throws InterruptedException {
-        LoadBalancer loadBalancer = new LoadBalancer(new RandomStrategy());
 
         int threadCount = 20;
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
@@ -179,7 +165,6 @@ public class LoadBalancerTest {
 
     @Test
     void shouldNotContainInstanceAfterUnregistering() {
-        loadBalancer = new LoadBalancer(new RandomStrategy());
         loadBalancer.registerInstance("123");
         loadBalancer.unregisterInstance("123");
 
@@ -187,12 +172,10 @@ public class LoadBalancerTest {
     }
     @Test
     void shouldNotUnregisterNonRegisteredInstance() {
-        loadBalancer = new LoadBalancer(new RandomStrategy());
         assertThrows(InstanceNotRegisteredException.class,() -> loadBalancer.unregisterInstance("123"));
     }
     @Test
     void shouldReRegisterAfterUnregistering() {
-        loadBalancer = new LoadBalancer(new RandomStrategy());
         loadBalancer.registerInstance("123");
         loadBalancer.unregisterInstance("123");
         assertFalse(loadBalancer.contains("123"));
@@ -215,5 +198,40 @@ public class LoadBalancerTest {
 
         assertTrue(result.equals("ins1") || result.equals("ins3"));
         assertNotEquals("ins2", result);
+    }
+
+    @Test
+    void shouldAllowOnlyOneUnregistrationWhenManyThreadsUnregisterSameAddressConcurrently() throws InterruptedException {
+        loadBalancer = new LoadBalancer(new RandomStrategy());
+        loadBalancer.registerInstance("same-address");
+
+        int threadCount = 20;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(threadCount);
+        AtomicInteger successCount = new AtomicInteger(0);
+
+        for (int i = 0; i < threadCount; i++) {
+            executor.submit(() -> {
+                try {
+                    startLatch.await();
+                    loadBalancer.unregisterInstance("same-address");
+                    successCount.incrementAndGet();
+                } catch (InstanceNotRegisteredException e) {
+                    // expected for 19 of the 20 threads — not a test failure
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        startLatch.countDown();
+        doneLatch.await();
+        executor.shutdown();
+
+        assertEquals(1, successCount.get());
+        assertEquals(0, loadBalancer.countInstances());
     }
 }
