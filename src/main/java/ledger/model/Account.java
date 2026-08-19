@@ -5,7 +5,7 @@ import ledger.exception.InsufficientFundsException;
 import java.util.UUID;
 
 public class Account {
-    private String id;
+    private final String id;
     private double accountBalance;
 
     public Account(double accountBalance) {

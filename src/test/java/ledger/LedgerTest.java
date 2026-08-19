@@ -110,7 +110,7 @@ public class LedgerTest {
         assertEquals(1000, ledgerService.getAccountBalance(fromId));
     }
     @Test
-    void shouldThrowWhenTransferingFromNonExistentAccount() {
+    void shouldThrowWhenTransferringFromNonExistentAccount() {
         String toId = ledgerService.createAccount(1000);
         assertThrows(InvalidAccountIdException.class,
                 () -> ledgerService.transfer("nonexistent-id", toId,500));

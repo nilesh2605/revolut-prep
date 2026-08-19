@@ -7,8 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class LedgerService {
 
-    private Map<String,Account> ledger;
-    //TODO: when to use final ??
+    private final Map<String,Account> ledger;
     public LedgerService() {
         this.ledger = new ConcurrentHashMap<>();
     }
@@ -17,7 +16,6 @@ public class LedgerService {
         if(accountBalance < 0)
             throw new InvalidAccountBalanceException("Cannot create an account with negative balance " + accountBalance);
         Account account = new Account(accountBalance);
-        //TODO: Check after how many numbers uuid collides? read about concurrent hashmaps
         ledger.put(account.getId(),account);
         return account.getId();
     }
@@ -62,23 +60,13 @@ public class LedgerService {
         if(!ledger.containsKey(fromAccountId) || !ledger.containsKey(toAccountId)){
             throw new InvalidAccountIdException("Invalid sender or receiver account id");
         }
-        if(amount < 0)
-            throw new InvalidAmountException("Cannot withdraw negative amount");
+        withdraw(fromAccountId,amount);
         try{
-            withdraw(fromAccountId,amount);
+            deposit(toAccountId,amount);
+        } catch (Exception e) {
+            deposit(fromAccountId, amount);
+            throw e;
+        }
 
-        }catch(Exception e) {
-            // withdraw failed
-        }
-        finally {
-            try{
-                deposit(toAccountId,amount);
-            } catch (Exception e) {
-                // deposit failed
-            }
-            finally {
-                deposit(fromAccountId,amount);
-            }
-        }
     }
 }
